@@ -10,15 +10,32 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <Stack
+      screenOptions={{
+        headerTitleAlign: 'center',
+      }}
+    >
+      <Stack.Screen
+        name="index"
+        options={{ title: 'Receipt Scanner' }}
+      />
+      <Stack.Screen
+        name="scan"
+        options={{ title: 'Skann kvittering' }}
+      />
+      <Stack.Screen
+        name="review"
+        options={{ title: 'Kontroller kvittering' }}
+      />
+      <Stack.Screen
+        name="history"
+        options={{ title: 'Historikk' }}
+      />
+      <Stack.Screen
+        name="receipt/[id]"
+        options={{ title: 'Kvitteringsdetaljer' }}
+      />
+    </Stack>
   );
 }

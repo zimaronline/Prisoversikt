@@ -20,8 +20,10 @@ type ItemDraft = {
   rawText?: string | null;
   normalizedName: string;
   quantityText: string;
-  unitText: string;
+  sizeValueText: string;
+  sizeUnitText: string;
   lineTotalText: string;
+  showSizeFields: boolean;
   discount?: number | null;
   confidence?: number | null;
 };
@@ -49,8 +51,10 @@ export default function ReviewScreen() {
         rawText: null,
         normalizedName: '',
         quantityText: '',
-        unitText: '',
+        sizeValueText: '',
+        sizeUnitText: '',
         lineTotalText: '',
+        showSizeFields: false,
         discount: 0,
         confidence: null,
       },
@@ -61,56 +65,30 @@ export default function ReviewScreen() {
     setItems((current) => current.filter((item) => item.id !== itemId));
   };
 
-  const updateItemName = (itemId: string, value: string) => {
+  const updateItemField = (
+    itemId: string,
+    field: keyof ItemDraft,
+    value: string | boolean
+  ) => {
     setItems((current) =>
       current.map((item) =>
         item.id === itemId
           ? {
               ...item,
-              normalizedName: value,
+              [field]: value,
             }
           : item
       )
     );
   };
 
-  const updateItemQuantity = (itemId: string, value: string) => {
-    const sanitized = sanitizeNumericInput(value);
-
+  const toggleSizeFields = (itemId: string) => {
     setItems((current) =>
       current.map((item) =>
         item.id === itemId
           ? {
               ...item,
-              quantityText: sanitized,
-            }
-          : item
-      )
-    );
-  };
-
-  const updateItemUnit = (itemId: string, value: string) => {
-    setItems((current) =>
-      current.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              unitText: value,
-            }
-          : item
-      )
-    );
-  };
-
-  const updateItemLineTotal = (itemId: string, value: string) => {
-    const sanitized = sanitizeNumericInput(value);
-
-    setItems((current) =>
-      current.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              lineTotalText: sanitized,
+              showSizeFields: !item.showSizeFields,
             }
           : item
       )
@@ -156,8 +134,9 @@ export default function ReviewScreen() {
 
       const parsedItems: ReceiptItem[] = items.map((item) => {
         const quantity = parseOptionalNumber(item.quantityText);
+        const sizeValue = parseOptionalNumber(item.sizeValueText);
         const lineTotal = parseOptionalNumber(item.lineTotalText) ?? 0;
-        const trimmedUnit = item.unitText.trim();
+        const trimmedSizeUnit = item.sizeUnitText.trim();
         const unitPrice =
           quantity && quantity > 0 ? Number((lineTotal / quantity).toFixed(2)) : null;
 
@@ -166,7 +145,9 @@ export default function ReviewScreen() {
           rawText: item.rawText ?? null,
           normalizedName: item.normalizedName.trim(),
           quantity,
-          unit: trimmedUnit || null,
+          unit: null,
+          sizeValue,
+          sizeUnit: trimmedSizeUnit || null,
           unitPrice,
           lineTotal,
           discount: item.discount ?? 0,
@@ -253,38 +234,74 @@ export default function ReviewScreen() {
             <Text style={styles.label}>Navn</Text>
             <TextInput
               value={item.normalizedName}
-              onChangeText={(value) => updateItemName(item.id, value)}
+              onChangeText={(value) => updateItemField(item.id, 'normalizedName', value)}
               style={styles.input}
               placeholder="Varenavn"
             />
 
-            <View style={styles.row}>
-              <View style={styles.rowField}>
-                <Text style={styles.label}>Antall</Text>
-                <TextInput
-                  value={item.quantityText}
-                  onChangeText={(value) => updateItemQuantity(item.id, value)}
-                  style={styles.input}
-                  keyboardType="decimal-pad"
-                  placeholder="Valgfritt"
-                />
-              </View>
+            <Text style={styles.label}>Mengde</Text>
+            <TextInput
+              value={item.quantityText}
+              onChangeText={(value) =>
+                updateItemField(item.id, 'quantityText', sanitizeNumericInput(value))
+              }
+              style={styles.input}
+              keyboardType="decimal-pad"
+              placeholder="Valgfritt"
+            />
 
-              <View style={styles.rowField}>
-                <Text style={styles.label}>Enhet</Text>
-                <TextInput
-                  value={item.unitText}
-                  onChangeText={(value) => updateItemUnit(item.id, value)}
-                  style={styles.input}
-                  placeholder="f.eks. stk, g, kg"
-                />
+            <Pressable
+              style={styles.inlineButton}
+              onPress={() => toggleSizeFields(item.id)}
+            >
+              <Text style={styles.inlineButtonText}>
+                {item.showSizeFields
+                  ? 'Skjul størrelse / måleenhet'
+                  : '+ Legg til størrelse / måleenhet'}
+              </Text>
+            </Pressable>
+
+            {item.showSizeFields ? (
+              <View style={styles.advancedSection}>
+                <View style={styles.row}>
+                  <View style={styles.rowField}>
+                    <Text style={styles.label}>Størrelse per enhet</Text>
+                    <TextInput
+                      value={item.sizeValueText}
+                      onChangeText={(value) =>
+                        updateItemField(
+                          item.id,
+                          'sizeValueText',
+                          sanitizeNumericInput(value)
+                        )
+                      }
+                      style={styles.input}
+                      keyboardType="decimal-pad"
+                      placeholder="Valgfritt"
+                    />
+                  </View>
+
+                  <View style={styles.rowField}>
+                    <Text style={styles.label}>Måleenhet</Text>
+                    <TextInput
+                      value={item.sizeUnitText}
+                      onChangeText={(value) =>
+                        updateItemField(item.id, 'sizeUnitText', value)
+                      }
+                      style={styles.input}
+                      placeholder="f.eks. g, kg, ml"
+                    />
+                  </View>
+                </View>
               </View>
-            </View>
+            ) : null}
 
             <Text style={styles.label}>Linjetotal</Text>
             <TextInput
               value={item.lineTotalText}
-              onChangeText={(value) => updateItemLineTotal(item.id, value)}
+              onChangeText={(value) =>
+                updateItemField(item.id, 'lineTotalText', sanitizeNumericInput(value))
+              }
               style={styles.input}
               keyboardType="decimal-pad"
               placeholder="0,00"
@@ -345,13 +362,18 @@ function createFallbackDraft(): ParsedReceiptResult {
 }
 
 function mapItemToDraft(item: ReceiptItem): ItemDraft {
+  const sizeValueText = formatNumber(item.sizeValue);
+  const sizeUnitText = item.sizeUnit ?? '';
+
   return {
     id: item.id,
     rawText: item.rawText ?? null,
     normalizedName: item.normalizedName ?? '',
     quantityText: formatNumber(item.quantity),
-    unitText: item.unit ?? '',
+    sizeValueText,
+    sizeUnitText,
     lineTotalText: formatNumber(item.lineTotal),
+    showSizeFields: Boolean(sizeValueText || sizeUnitText),
     discount: item.discount ?? 0,
     confidence: item.confidence ?? null,
   };
@@ -438,6 +460,19 @@ const styles = StyleSheet.create({
   },
   rowField: {
     flex: 1,
+  },
+  advancedSection: {
+    marginBottom: 2,
+  },
+  inlineButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  inlineButtonText: {
+    color: '#2563eb',
+    fontSize: 14,
+    fontWeight: '600',
   },
   emptyState: {
     padding: 16,

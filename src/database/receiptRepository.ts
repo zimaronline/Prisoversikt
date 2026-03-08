@@ -26,6 +26,8 @@ type ReceiptItemRow = {
   normalized_name: string;
   quantity: number | null;
   unit: string | null;
+  size_value: number | null;
+  size_unit: string | null;
   unit_price: number | null;
   line_total: number;
   discount: number | null;
@@ -89,12 +91,14 @@ export async function saveReceiptWithItems(
             normalized_name,
             quantity,
             unit,
+            size_value,
+            size_unit,
             unit_price,
             line_total,
             discount,
             confidence
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           createId('item'),
@@ -103,6 +107,8 @@ export async function saveReceiptWithItems(
           item.normalizedName.trim(),
           item.quantity ?? null,
           item.unit ?? null,
+          item.sizeValue ?? null,
+          item.sizeUnit ?? null,
           item.unitPrice ?? null,
           item.lineTotal,
           item.discount ?? null,
@@ -182,6 +188,8 @@ export async function getReceiptById(id: string): Promise<Receipt | null> {
         normalized_name,
         quantity,
         unit,
+        size_value,
+        size_unit,
         unit_price,
         line_total,
         discount,
@@ -225,6 +233,8 @@ function mapReceiptItemRow(row: ReceiptItemRow): ReceiptItem {
     normalizedName: row.normalized_name,
     quantity: row.quantity,
     unit: row.unit,
+    sizeValue: row.size_value,
+    sizeUnit: row.size_unit,
     unitPrice: row.unit_price,
     lineTotal: row.line_total,
     discount: row.discount,

@@ -90,10 +90,8 @@ export default function ReceiptDetailScreen() {
           <View key={item.id} style={styles.itemRow}>
             <Text style={styles.itemName}>{item.normalizedName}</Text>
 
-            {(item.quantity || item.unit) ? (
-              <Text style={styles.itemMeta}>
-                {formatQuantityAndUnit(item.quantity, item.unit)}
-              </Text>
+            {buildItemMeta(item) ? (
+              <Text style={styles.itemMeta}>{buildItemMeta(item)}</Text>
             ) : null}
 
             <Text style={styles.itemAmount}>
@@ -106,23 +104,30 @@ export default function ReceiptDetailScreen() {
   );
 }
 
-function formatQuantityAndUnit(
-  quantity?: number | null,
-  unit?: string | null
-): string {
-  if (quantity && unit) {
-    return `${String(quantity).replace('.', ',')} ${unit}`;
+function buildItemMeta(item: Receipt['items'][number]): string {
+  const parts: string[] = [];
+
+  if (item.quantity && item.unit) {
+    parts.push(`${formatNumber(item.quantity)} ${item.unit}`);
+  } else if (item.quantity) {
+    parts.push(`Antall: ${formatNumber(item.quantity)}`);
+  } else if (item.unit) {
+    parts.push(`Enhet: ${item.unit}`);
   }
 
-  if (quantity) {
-    return `Antall: ${String(quantity).replace('.', ',')}`;
+  if (item.sizeValue && item.sizeUnit) {
+    parts.push(`á ${formatNumber(item.sizeValue)} ${item.sizeUnit}`);
+  } else if (item.sizeValue) {
+    parts.push(`Størrelse: ${formatNumber(item.sizeValue)}`);
+  } else if (item.sizeUnit) {
+    parts.push(`Størrelsesenhet: ${item.sizeUnit}`);
   }
 
-  if (unit) {
-    return `Enhet: ${unit}`;
-  }
+  return parts.join(' · ');
+}
 
-  return '';
+function formatNumber(value: number): string {
+  return String(value).replace('.', ',');
 }
 
 const styles = StyleSheet.create({

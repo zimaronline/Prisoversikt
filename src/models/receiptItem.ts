@@ -5,6 +5,8 @@ export interface ReceiptItem {
   normalizedName: string;
   quantity?: number | null;
   unit?: string | null;
+  sizeValue?: number | null;
+  sizeUnit?: string | null;
   unitPrice?: number | null;
   lineTotal: number;
   discount?: number | null;

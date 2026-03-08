@@ -2,6 +2,10 @@ import { getDb } from './db';
 
 let hasRunMigrations = false;
 
+type TableInfoRow = {
+  name: string;
+};
+
 export async function runMigrations(): Promise<void> {
   if (hasRunMigrations) {
     return;
@@ -46,5 +50,25 @@ export async function runMigrations(): Promise<void> {
       ON receipt_items (receipt_id);
   `);
 
+  await ensureReceiptItemsColumns();
+
   hasRunMigrations = true;
+}
+
+async function ensureReceiptItemsColumns(): Promise<void> {
+  const db = await getDb();
+
+  const columns = await db.getAllAsync<TableInfoRow>(
+    `PRAGMA table_info(receipt_items);`
+  );
+
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has('size_value')) {
+    await db.execAsync(`ALTER TABLE receipt_items ADD COLUMN size_value REAL;`);
+  }
+
+  if (!columnNames.has('size_unit')) {
+    await db.execAsync(`ALTER TABLE receipt_items ADD COLUMN size_unit TEXT;`);
+  }
 }

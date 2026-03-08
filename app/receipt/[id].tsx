@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Receipt } from '../../src/models/receipt';
+import type { Receipt } from '../../src/models/receipt';
 
 export default function ReceiptDetailScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
@@ -20,10 +20,10 @@ export default function ReceiptDetailScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>{receipt.storeName}</Text>
+      <Text style={styles.title}>{receipt.merchantName}</Text>
       <Text style={styles.meta}>Dato: {receipt.purchaseDate}</Text>
       <Text style={styles.meta}>
-        Total: {receipt.totalAmount.toFixed(2)} {receipt.currency}
+        Total: {receipt.total.toFixed(2)} {receipt.currency}
       </Text>
 
       <View style={styles.section}>
@@ -46,57 +46,21 @@ function getMockReceipt(id?: string): Receipt | null {
   const receipts: Record<string, Receipt> = {
     'receipt-1': {
       id: 'receipt-1',
-      storeName: 'REMA 1000',
+      merchantName: 'KIWI',
       purchaseDate: '2026-03-06',
-      subtotalAmount: 152.5,
-      taxAmount: 30.5,
-      totalAmount: 152.5,
+      subtotal: 134.8,
+      total: 134.8,
+      vatTotal: 26.96,
       currency: 'NOK',
       imageUri: '',
-      rawText: '',
+      rawOcrResponse: null,
+      parseConfidence: 0.91,
       createdAt: '2026-03-06T18:00:00.000Z',
+      updatedAt: '2026-03-06T18:00:00.000Z',
       items: [
         {
           id: 'item-1',
           receiptId: 'receipt-1',
-          rawText: 'MELK 1L 24.90',
-          normalizedName: 'Melk 1L',
-          quantity: 1,
-          unit: 'stk',
-          unitPrice: 24.9,
-          lineTotal: 24.9,
-          discount: 0,
-          confidence: 0.97,
-        },
-        {
-          id: 'item-2',
-          receiptId: 'receipt-1',
-          rawText: 'BRØD 34.90',
-          normalizedName: 'Brød',
-          quantity: 1,
-          unit: 'stk',
-          unitPrice: 34.9,
-          lineTotal: 34.9,
-          discount: 0,
-          confidence: 0.95,
-        },
-      ],
-    },
-    'receipt-2': {
-      id: 'receipt-2',
-      storeName: 'Kiwi',
-      purchaseDate: '2026-03-02',
-      subtotalAmount: 89.4,
-      taxAmount: 17.88,
-      totalAmount: 89.4,
-      currency: 'NOK',
-      imageUri: '',
-      rawText: '',
-      createdAt: '2026-03-02T12:30:00.000Z',
-      items: [
-        {
-          id: 'item-3',
-          receiptId: 'receipt-2',
           rawText: 'BANANER 32.50',
           normalizedName: 'Bananer',
           quantity: 1,
@@ -104,19 +68,59 @@ function getMockReceipt(id?: string): Receipt | null {
           unitPrice: 32.5,
           lineTotal: 32.5,
           discount: 0,
+          confidence: 0.95,
+        },
+        {
+          id: 'item-2',
+          receiptId: 'receipt-1',
+          rawText: 'MELK LETT 24.90',
+          normalizedName: 'Melk lett',
+          quantity: 1,
+          unit: 'stk',
+          unitPrice: 24.9,
+          lineTotal: 24.9,
+          discount: 0,
+          confidence: 0.96,
+        },
+      ],
+    },
+    'receipt-2': {
+      id: 'receipt-2',
+      merchantName: 'REMA 1000',
+      purchaseDate: '2026-03-02',
+      subtotal: 152.5,
+      total: 152.5,
+      vatTotal: 30.5,
+      currency: 'NOK',
+      imageUri: '',
+      rawOcrResponse: null,
+      parseConfidence: 0.9,
+      createdAt: '2026-03-02T12:30:00.000Z',
+      updatedAt: '2026-03-02T12:30:00.000Z',
+      items: [
+        {
+          id: 'item-3',
+          receiptId: 'receipt-2',
+          rawText: 'MELK 1L 24.90',
+          normalizedName: 'Melk 1L',
+          quantity: 1,
+          unit: 'stk',
+          unitPrice: 24.9,
+          lineTotal: 24.9,
+          discount: 0,
           confidence: 0.94,
         },
         {
           id: 'item-4',
           receiptId: 'receipt-2',
-          rawText: 'KAFFE 56.90',
-          normalizedName: 'Kaffe',
+          rawText: 'BRØD 34.90',
+          normalizedName: 'Brød',
           quantity: 1,
           unit: 'stk',
-          unitPrice: 56.9,
-          lineTotal: 56.9,
+          unitPrice: 34.9,
+          lineTotal: 34.9,
           discount: 0,
-          confidence: 0.92,
+          confidence: 0.93,
         },
       ],
     },
@@ -144,6 +148,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     marginBottom: 8,
+    color: '#111827',
   },
   emptyText: {
     fontSize: 16,
@@ -153,6 +158,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     marginBottom: 12,
+    color: '#111827',
   },
   meta: {
     fontSize: 16,
@@ -166,6 +172,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     marginBottom: 12,
+    color: '#111827',
   },
   itemRow: {
     paddingVertical: 12,
@@ -176,6 +183,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
+    color: '#111827',
   },
   itemAmount: {
     fontSize: 15,

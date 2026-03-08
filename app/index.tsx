@@ -11,17 +11,11 @@ export default function HomeScreen() {
         Skann og lagre kvitteringer for senere oversikt.
       </Text>
 
-      <Pressable
-        style={styles.primaryButton}
-        onPress={() => router.push('/scan')}
-      >
+      <Pressable style={styles.primaryButton} onPress={() => router.push('/scan')}>
         <Text style={styles.primaryButtonText}>Skann kvittering</Text>
       </Pressable>
 
-      <Pressable
-        style={styles.secondaryButton}
-        onPress={() => router.push('/history')}
-      >
+      <Pressable style={styles.secondaryButton} onPress={() => router.push('/history')}>
         <Text style={styles.secondaryButtonText}>Se historikk</Text>
       </Pressable>
     </View>
@@ -39,6 +33,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: '700',
     marginBottom: 12,
+    color: '#111827',
   },
   subtitle: {
     fontSize: 16,

@@ -1,45 +1,47 @@
-import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import {
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
-import { ParsedReceiptResult } from '../src/models/parser';
+import { parseReceiptMock } from '../src/services/receiptParserService';
 
 export default function ScanScreen() {
   const router = useRouter();
-  const [previewUri, setPreviewUri] = React.useState<string | null>(null);
-  const [draftJson, setDraftJson] = React.useState<string | null>(null);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [draftJson, setDraftJson] = useState<string | null>(null);
+  const [isPreparingDraft, setIsPreparingDraft] = useState(false);
 
-  const handleResult = (result: ImagePicker.ImagePickerResult) => {
+  const handleImageResult = async (result: ImagePicker.ImagePickerResult) => {
     if (result.canceled) {
       return;
     }
 
-    const asset = result.assets[0];
+    const asset = result.assets?.[0];
     if (!asset?.uri) {
       Alert.alert('Feil', 'Fant ikke bilde-URI.');
       return;
     }
 
-    const draft = createMockReceipt(asset.uri);
-    setPreviewUri(asset.uri);
-    setDraftJson(JSON.stringify(draft));
-  };
+    try {
+      setIsPreparingDraft(true);
 
-  const pickFromLibrary = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const draft = await parseReceiptMock(asset.uri);
 
-    if (!permission.granted) {
-      Alert.alert('Tilgang nektet', 'Appen trenger tilgang til bildebiblioteket.');
-      return;
+      setPreviewUri(asset.uri);
+      setDraftJson(JSON.stringify(draft));
+    } catch {
+      Alert.alert('Feil', 'Kunne ikke forberede kvitteringen.');
+    } finally {
+      setIsPreparingDraft(false);
     }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.8,
-    });
-
-    handleResult(result);
   };
 
   const takePhoto = async () => {
@@ -56,12 +58,34 @@ export default function ScanScreen() {
       quality: 0.8,
     });
 
-    handleResult(result);
+    await handleImageResult(result);
+  };
+
+  const pickFromLibrary = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert('Tilgang nektet', 'Appen trenger tilgang til bildegalleriet.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    await handleImageResult(result);
+  };
+
+  const resetImage = () => {
+    setPreviewUri(null);
+    setDraftJson(null);
   };
 
   const continueToReview = () => {
     if (!draftJson) {
-      Alert.alert('Manglende data', 'Velg eller ta et bilde først.');
+      Alert.alert('Mangler bilde', 'Velg eller ta et bilde først.');
       return;
     }
 
@@ -75,78 +99,55 @@ export default function ScanScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Legg til kvitteringsbilde</Text>
+      <Text style={styles.title}>Skann kvittering</Text>
       <Text style={styles.description}>
-        I første versjon bruker vi bilde fra kamera eller galleri og lager mockdata til kontrollskjermen.
+        Velg bilde fra kamera eller galleri.
       </Text>
 
-      <Pressable style={styles.primaryButton} onPress={takePhoto}>
-        <Text style={styles.primaryButtonText}>Ta bilde</Text>
+      <Text style={styles.notice}>
+        Denne versjonen tolker ikke varelinjer automatisk ennå. Du går videre til
+        manuell kontroll på neste skjerm.
+      </Text>
+
+      <Pressable
+        style={[styles.primaryButton, isPreparingDraft && styles.disabledButton]}
+        onPress={takePhoto}
+        disabled={isPreparingDraft}
+      >
+        <Text style={styles.primaryButtonText}>
+          {isPreparingDraft ? 'Klargjør...' : 'Åpne kamera'}
+        </Text>
       </Pressable>
 
-      <Pressable style={styles.secondaryButton} onPress={pickFromLibrary}>
+      <Pressable
+        style={[styles.secondaryButton, isPreparingDraft && styles.disabledButton]}
+        onPress={pickFromLibrary}
+        disabled={isPreparingDraft}
+      >
         <Text style={styles.secondaryButtonText}>Velg fra galleri</Text>
       </Pressable>
 
       {previewUri ? (
         <View style={styles.previewCard}>
           <Text style={styles.previewTitle}>Forhåndsvisning</Text>
+
           <Image source={{ uri: previewUri }} style={styles.previewImage} />
+
+          <Text style={styles.previewNote}>
+            Bildet er valgt. Neste steg er manuell kontroll og utfylling.
+          </Text>
+
           <Pressable style={styles.primaryButton} onPress={continueToReview}>
-            <Text style={styles.primaryButtonText}>Bruk dette bildet</Text>
+            <Text style={styles.primaryButtonText}>Fortsett til kontroll</Text>
+          </Pressable>
+
+          <Pressable style={styles.secondaryButton} onPress={resetImage}>
+            <Text style={styles.secondaryButtonText}>Velg nytt bilde</Text>
           </Pressable>
         </View>
       ) : null}
     </ScrollView>
   );
-}
-
-function createMockReceipt(imageUri: string): ParsedReceiptResult {
-  return {
-    storeName: 'REMA 1000',
-    purchaseDate: new Date().toISOString().slice(0, 10),
-    subtotalAmount: 152.5,
-    taxAmount: 30.5,
-    totalAmount: 152.5,
-    currency: 'NOK',
-    imageUri,
-    rawText: 'REMA 1000\nMELK 1L 24.90\nBRØD 34.90\nOST 92.70\nTOTAL 152.50',
-    items: [
-      {
-        id: 'item-1',
-        rawText: 'MELK 1L 24.90',
-        normalizedName: 'Melk 1L',
-        quantity: 1,
-        unit: 'stk',
-        unitPrice: 24.9,
-        lineTotal: 24.9,
-        discount: 0,
-        confidence: 0.97,
-      },
-      {
-        id: 'item-2',
-        rawText: 'BRØD 34.90',
-        normalizedName: 'Brød',
-        quantity: 1,
-        unit: 'stk',
-        unitPrice: 34.9,
-        lineTotal: 34.9,
-        discount: 0,
-        confidence: 0.95,
-      },
-      {
-        id: 'item-3',
-        rawText: 'OST 92.70',
-        normalizedName: 'Ost',
-        quantity: 1,
-        unit: 'stk',
-        unitPrice: 92.7,
-        lineTotal: 92.7,
-        discount: 0,
-        confidence: 0.93,
-      },
-    ],
-  };
 }
 
 const styles = StyleSheet.create({
@@ -158,11 +159,23 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     marginBottom: 12,
+    color: '#111827',
   },
   description: {
     fontSize: 16,
     lineHeight: 24,
     color: '#4b5563',
+    marginBottom: 12,
+  },
+  notice: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#92400e',
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderRadius: 12,
+    padding: 12,
     marginBottom: 24,
   },
   primaryButton: {
@@ -185,12 +198,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
     marginBottom: 12,
+    backgroundColor: '#ffffff',
   },
   secondaryButtonText: {
     color: '#111827',
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
   previewCard: {
     marginTop: 16,
@@ -204,6 +221,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 12,
+    color: '#111827',
   },
   previewImage: {
     width: '100%',
@@ -211,6 +229,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     resizeMode: 'contain',
     backgroundColor: '#e5e7eb',
+    marginBottom: 16,
+  },
+  previewNote: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#4b5563',
     marginBottom: 16,
   },
 });

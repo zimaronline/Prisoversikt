@@ -1,13 +1,14 @@
-import { ReceiptItem } from './receiptItem';
+import type { ReceiptItem } from './receiptItem';
 
 export interface ParsedReceiptResult {
-  storeName: string;
+  merchantName: string;
   purchaseDate: string;
-  subtotalAmount?: number | null;
-  taxAmount?: number | null;
-  totalAmount: number;
+  subtotal?: number | null;
+  total: number;
+  vatTotal?: number | null;
   currency: string;
   imageUri: string;
-  rawText?: string | null;
+  rawOcrResponse?: string | null;
+  parseConfidence?: number | null;
   items: ReceiptItem[];
 }

@@ -1,19 +1,68 @@
 import { useLocalSearchParams } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import type { Receipt } from '../../src/models/receipt';
+import { getStoredReceipt } from '../../src/services/receiptStorageService';
 
 export default function ReceiptDetailScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
-  const receipt = getMockReceipt(id);
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  if (!receipt) {
+  useEffect(() => {
+    const loadReceipt = async () => {
+      if (!id) {
+        setErrorMessage('Manglende kvitterings-ID.');
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setErrorMessage(null);
+        setIsLoading(true);
+
+        const row = await getStoredReceipt(id);
+        setReceipt(row);
+
+        if (!row) {
+          setErrorMessage('Fant ikke kvittering.');
+        }
+      } catch (error) {
+        console.error('Failed to load receipt', error);
+        setErrorMessage('Kunne ikke hente kvitteringen.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void loadReceipt();
+  }, [id]);
+
+  if (isLoading) {
     return (
-      <View style={styles.emptyContainer}>
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" />
+        <Text style={styles.helperText}>Laster kvittering...</Text>
+      </View>
+    );
+  }
+
+  if (errorMessage || !receipt) {
+    return (
+      <View style={styles.centered}>
         <Text style={styles.emptyTitle}>Fant ikke kvittering</Text>
-        <Text style={styles.emptyText}>ID: {id ?? 'ukjent'}</Text>
+        <Text style={styles.helperText}>{errorMessage ?? 'Ukjent feil.'}</Text>
       </View>
     );
   }
@@ -26,12 +75,27 @@ export default function ReceiptDetailScreen() {
         Total: {receipt.total.toFixed(2)} {receipt.currency}
       </Text>
 
+      {receipt.imageUri ? (
+        <Image source={{ uri: receipt.imageUri }} style={styles.previewImage} />
+      ) : null}
+
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Varelinjer</Text>
+
+        {receipt.items.length === 0 ? (
+          <Text style={styles.helperText}>Ingen varelinjer lagret.</Text>
+        ) : null}
 
         {receipt.items.map((item) => (
           <View key={item.id} style={styles.itemRow}>
             <Text style={styles.itemName}>{item.normalizedName}</Text>
+
+            {(item.quantity || item.unit) ? (
+              <Text style={styles.itemMeta}>
+                {formatQuantityAndUnit(item.quantity, item.unit)}
+              </Text>
+            ) : null}
+
             <Text style={styles.itemAmount}>
               {item.lineTotal.toFixed(2)} {receipt.currency}
             </Text>
@@ -42,95 +106,23 @@ export default function ReceiptDetailScreen() {
   );
 }
 
-function getMockReceipt(id?: string): Receipt | null {
-  const receipts: Record<string, Receipt> = {
-    'receipt-1': {
-      id: 'receipt-1',
-      merchantName: 'KIWI',
-      purchaseDate: '2026-03-06',
-      subtotal: 134.8,
-      total: 134.8,
-      vatTotal: 26.96,
-      currency: 'NOK',
-      imageUri: '',
-      rawOcrResponse: null,
-      parseConfidence: 0.91,
-      createdAt: '2026-03-06T18:00:00.000Z',
-      updatedAt: '2026-03-06T18:00:00.000Z',
-      items: [
-        {
-          id: 'item-1',
-          receiptId: 'receipt-1',
-          rawText: 'BANANER 32.50',
-          normalizedName: 'Bananer',
-          quantity: 1,
-          unit: 'kg',
-          unitPrice: 32.5,
-          lineTotal: 32.5,
-          discount: 0,
-          confidence: 0.95,
-        },
-        {
-          id: 'item-2',
-          receiptId: 'receipt-1',
-          rawText: 'MELK LETT 24.90',
-          normalizedName: 'Melk lett',
-          quantity: 1,
-          unit: 'stk',
-          unitPrice: 24.9,
-          lineTotal: 24.9,
-          discount: 0,
-          confidence: 0.96,
-        },
-      ],
-    },
-    'receipt-2': {
-      id: 'receipt-2',
-      merchantName: 'REMA 1000',
-      purchaseDate: '2026-03-02',
-      subtotal: 152.5,
-      total: 152.5,
-      vatTotal: 30.5,
-      currency: 'NOK',
-      imageUri: '',
-      rawOcrResponse: null,
-      parseConfidence: 0.9,
-      createdAt: '2026-03-02T12:30:00.000Z',
-      updatedAt: '2026-03-02T12:30:00.000Z',
-      items: [
-        {
-          id: 'item-3',
-          receiptId: 'receipt-2',
-          rawText: 'MELK 1L 24.90',
-          normalizedName: 'Melk 1L',
-          quantity: 1,
-          unit: 'stk',
-          unitPrice: 24.9,
-          lineTotal: 24.9,
-          discount: 0,
-          confidence: 0.94,
-        },
-        {
-          id: 'item-4',
-          receiptId: 'receipt-2',
-          rawText: 'BRØD 34.90',
-          normalizedName: 'Brød',
-          quantity: 1,
-          unit: 'stk',
-          unitPrice: 34.9,
-          lineTotal: 34.9,
-          discount: 0,
-          confidence: 0.93,
-        },
-      ],
-    },
-  };
-
-  if (!id) {
-    return null;
+function formatQuantityAndUnit(
+  quantity?: number | null,
+  unit?: string | null
+): string {
+  if (quantity && unit) {
+    return `${String(quantity).replace('.', ',')} ${unit}`;
   }
 
-  return receipts[id] ?? null;
+  if (quantity) {
+    return `Antall: ${String(quantity).replace('.', ',')}`;
+  }
+
+  if (unit) {
+    return `Enhet: ${unit}`;
+  }
+
+  return '';
 }
 
 const styles = StyleSheet.create({
@@ -138,21 +130,12 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: '#ffffff',
   },
-  emptyContainer: {
+  centered: {
     flex: 1,
     padding: 24,
     justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#ffffff',
-  },
-  emptyTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 8,
-    color: '#111827',
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#6b7280',
   },
   title: {
     fontSize: 28,
@@ -165,8 +148,17 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     marginBottom: 6,
   },
+  previewImage: {
+    width: '100%',
+    height: 260,
+    borderRadius: 12,
+    resizeMode: 'contain',
+    backgroundColor: '#e5e7eb',
+    marginTop: 18,
+    marginBottom: 24,
+  },
   section: {
-    marginTop: 24,
+    marginTop: 8,
   },
   sectionTitle: {
     fontSize: 20,
@@ -185,8 +177,25 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     color: '#111827',
   },
+  itemMeta: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
   itemAmount: {
     fontSize: 15,
     color: '#374151',
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  helperText: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: '#6b7280',
+    textAlign: 'center',
   },
 });

@@ -13,181 +13,281 @@ import {
 
 import type { ParsedReceiptResult } from '../src/models/parser';
 import type { ReceiptItem } from '../src/models/receiptItem';
+import { saveParsedReceipt } from '../src/services/receiptStorageService';
+
+type ItemDraft = {
+  id: string;
+  rawText?: string | null;
+  normalizedName: string;
+  quantityText: string;
+  unitText: string;
+  lineTotalText: string;
+  discount?: number | null;
+  confidence?: number | null;
+};
 
 export default function ReviewScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ draft?: string | string[] }>();
 
   const rawDraft = Array.isArray(params.draft) ? params.draft[0] : params.draft;
-
   const initialDraft = useMemo(() => parseDraft(rawDraft), [rawDraft]);
-  const [receipt, setReceipt] = useState<ParsedReceiptResult>(initialDraft);
 
-  const updateField = <K extends keyof ParsedReceiptResult>(
-    key: K,
-    value: ParsedReceiptResult[K]
-  ) => {
-    setReceipt((current) => ({
+  const [merchantName, setMerchantName] = useState(initialDraft.merchantName);
+  const [purchaseDate, setPurchaseDate] = useState(initialDraft.purchaseDate);
+  const [totalText, setTotalText] = useState(formatNumber(initialDraft.total));
+  const [items, setItems] = useState<ItemDraft[]>(
+    initialDraft.items.map(mapItemToDraft)
+  );
+  const [isSaving, setIsSaving] = useState(false);
+
+  const addItem = () => {
+    setItems((current) => [
       ...current,
-      [key]: value,
-    }));
-  };
-
-  const updateItemField = <K extends keyof ReceiptItem>(
-    itemId: string,
-    key: K,
-    value: ReceiptItem[K]
-  ) => {
-    setReceipt((current) => {
-      const nextItems = current.items.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              [key]: value,
-            }
-          : item
-      );
-
-      return {
-        ...current,
-        items: nextItems,
-        total: calculateTotal(nextItems),
-      };
-    });
-  };
-
-  const updateItemLineTotal = (itemId: string, value: string) => {
-    const parsed = parseNumber(value);
-
-    setReceipt((current) => {
-      const nextItems = current.items.map((item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              lineTotal: parsed,
-              unitPrice: parsed,
-            }
-          : item
-      );
-
-      return {
-        ...current,
-        items: nextItems,
-        total: calculateTotal(nextItems),
-      };
-    });
+      {
+        id: `item-${Date.now()}`,
+        rawText: null,
+        normalizedName: '',
+        quantityText: '',
+        unitText: '',
+        lineTotalText: '',
+        discount: 0,
+        confidence: null,
+      },
+    ]);
   };
 
   const removeItem = (itemId: string) => {
-    setReceipt((current) => {
-      const nextItems = current.items.filter((item) => item.id !== itemId);
-
-      return {
-        ...current,
-        items: nextItems,
-        total: calculateTotal(nextItems),
-      };
-    });
+    setItems((current) => current.filter((item) => item.id !== itemId));
   };
 
-  const addItem = () => {
-    const newItem: ReceiptItem = {
-      id: `item-${Date.now()}`,
-      rawText: null,
-      normalizedName: '',
-      quantity: 1,
-      unit: 'stk',
-      unitPrice: 0,
-      lineTotal: 0,
-      discount: 0,
-      confidence: null,
-    };
-
-    setReceipt((current) => ({
-      ...current,
-      items: [...current.items, newItem],
-    }));
-  };
-
-  const saveReceipt = () => {
-    Alert.alert(
-      'Neste steg',
-      'SQLite-lagring kobles på i neste etappe. Nå verifiserer vi ærlig review-flyt uten falske varelinjer.'
+  const updateItemName = (itemId: string, value: string) => {
+    setItems((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              normalizedName: value,
+            }
+          : item
+      )
     );
+  };
 
-    router.push('/history');
+  const updateItemQuantity = (itemId: string, value: string) => {
+    const sanitized = sanitizeNumericInput(value);
+
+    setItems((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              quantityText: sanitized,
+            }
+          : item
+      )
+    );
+  };
+
+  const updateItemUnit = (itemId: string, value: string) => {
+    setItems((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              unitText: value,
+            }
+          : item
+      )
+    );
+  };
+
+  const updateItemLineTotal = (itemId: string, value: string) => {
+    const sanitized = sanitizeNumericInput(value);
+
+    setItems((current) =>
+      current.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              lineTotalText: sanitized,
+            }
+          : item
+      )
+    );
+  };
+
+  const saveReceipt = async () => {
+    const trimmedMerchantName = merchantName.trim();
+    const trimmedPurchaseDate = purchaseDate.trim();
+
+    if (!trimmedMerchantName) {
+      Alert.alert('Mangler butikk', 'Fyll inn butikknavn før lagring.');
+      return;
+    }
+
+    if (!trimmedPurchaseDate) {
+      Alert.alert('Mangler dato', 'Fyll inn dato før lagring.');
+      return;
+    }
+
+    const parsedTotal = parseOptionalNumber(totalText);
+    if (parsedTotal === null) {
+      Alert.alert('Ugyldig total', 'Fyll inn et gyldig totalbeløp.');
+      return;
+    }
+
+    const hasInvalidItemName = items.some((item) => !item.normalizedName.trim());
+    if (hasInvalidItemName) {
+      Alert.alert('Ufullstendig varelinje', 'Alle varelinjer må ha navn før lagring.');
+      return;
+    }
+
+    const hasInvalidItemAmount = items.some(
+      (item) => parseOptionalNumber(item.lineTotalText) === null
+    );
+    if (hasInvalidItemAmount) {
+      Alert.alert('Ugyldig varelinje', 'Alle varelinjer må ha et gyldig beløp.');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+
+      const parsedItems: ReceiptItem[] = items.map((item) => {
+        const quantity = parseOptionalNumber(item.quantityText);
+        const lineTotal = parseOptionalNumber(item.lineTotalText) ?? 0;
+        const trimmedUnit = item.unitText.trim();
+        const unitPrice =
+          quantity && quantity > 0 ? Number((lineTotal / quantity).toFixed(2)) : null;
+
+        return {
+          id: item.id,
+          rawText: item.rawText ?? null,
+          normalizedName: item.normalizedName.trim(),
+          quantity,
+          unit: trimmedUnit || null,
+          unitPrice,
+          lineTotal,
+          discount: item.discount ?? 0,
+          confidence: item.confidence ?? null,
+        };
+      });
+
+      const payload: ParsedReceiptResult = {
+        merchantName: trimmedMerchantName,
+        purchaseDate: trimmedPurchaseDate,
+        subtotal: null,
+        total: parsedTotal,
+        vatTotal: null,
+        currency: 'NOK',
+        imageUri: initialDraft.imageUri,
+        rawOcrResponse: initialDraft.rawOcrResponse ?? null,
+        parseConfidence: initialDraft.parseConfidence ?? null,
+        items: parsedItems,
+      };
+
+      await saveParsedReceipt(payload);
+
+      router.replace('/history');
+    } catch (error) {
+      console.error('Failed to save receipt', error);
+      Alert.alert('Lagring feilet', 'Kunne ikke lagre kvitteringen.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Kontroller kvittering</Text>
       <Text style={styles.description}>
-        Denne versjonen fyller ikke inn varer automatisk. Legg til eller rediger
-        feltene manuelt før lagring.
+        Legg inn butikk, dato, total og varelinjer manuelt før lagring.
       </Text>
 
-      {receipt.imageUri ? (
-        <Image source={{ uri: receipt.imageUri }} style={styles.previewImage} />
+      {initialDraft.imageUri ? (
+        <Image source={{ uri: initialDraft.imageUri }} style={styles.previewImage} />
       ) : null}
 
       <View style={styles.section}>
         <Text style={styles.label}>Butikk</Text>
         <TextInput
-          value={receipt.merchantName}
-          onChangeText={(value) => updateField('merchantName', value)}
+          value={merchantName}
+          onChangeText={setMerchantName}
           style={styles.input}
           placeholder="Butikknavn"
         />
 
         <Text style={styles.label}>Dato</Text>
         <TextInput
-          value={receipt.purchaseDate}
-          onChangeText={(value) => updateField('purchaseDate', value)}
+          value={purchaseDate}
+          onChangeText={setPurchaseDate}
           style={styles.input}
           placeholder="YYYY-MM-DD"
         />
 
         <Text style={styles.label}>Total</Text>
         <TextInput
-          value={receipt.total.toFixed(2)}
-          onChangeText={(value) => updateField('total', parseNumber(value))}
+          value={totalText}
+          onChangeText={(value) => setTotalText(sanitizeNumericInput(value))}
           style={styles.input}
           keyboardType="decimal-pad"
-          placeholder="0.00"
+          placeholder="0,00"
         />
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Varelinjer</Text>
 
-        {receipt.items.length === 0 ? (
+        {items.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateTitle}>Ingen varelinjer funnet</Text>
+            <Text style={styles.emptyStateTitle}>Ingen varelinjer lagt til</Text>
             <Text style={styles.emptyStateText}>
               Legg til varelinjer manuelt i denne fasen.
             </Text>
           </View>
         ) : null}
 
-        {receipt.items.map((item) => (
+        {items.map((item) => (
           <View key={item.id} style={styles.itemCard}>
             <Text style={styles.label}>Navn</Text>
             <TextInput
               value={item.normalizedName}
-              onChangeText={(value) =>
-                updateItemField(item.id, 'normalizedName', value)
-              }
+              onChangeText={(value) => updateItemName(item.id, value)}
               style={styles.input}
               placeholder="Varenavn"
             />
 
+            <View style={styles.row}>
+              <View style={styles.rowField}>
+                <Text style={styles.label}>Antall</Text>
+                <TextInput
+                  value={item.quantityText}
+                  onChangeText={(value) => updateItemQuantity(item.id, value)}
+                  style={styles.input}
+                  keyboardType="decimal-pad"
+                  placeholder="Valgfritt"
+                />
+              </View>
+
+              <View style={styles.rowField}>
+                <Text style={styles.label}>Enhet</Text>
+                <TextInput
+                  value={item.unitText}
+                  onChangeText={(value) => updateItemUnit(item.id, value)}
+                  style={styles.input}
+                  placeholder="f.eks. stk, g, kg"
+                />
+              </View>
+            </View>
+
             <Text style={styles.label}>Linjetotal</Text>
             <TextInput
-              value={item.lineTotal.toFixed(2)}
+              value={item.lineTotalText}
               onChangeText={(value) => updateItemLineTotal(item.id, value)}
               style={styles.input}
               keyboardType="decimal-pad"
-              placeholder="0.00"
+              placeholder="0,00"
             />
 
             <Pressable
@@ -204,8 +304,14 @@ export default function ReviewScreen() {
         </Pressable>
       </View>
 
-      <Pressable style={styles.primaryButton} onPress={saveReceipt}>
-        <Text style={styles.primaryButtonText}>Lagre kvittering</Text>
+      <Pressable
+        style={[styles.primaryButton, isSaving && styles.disabledButton]}
+        onPress={saveReceipt}
+        disabled={isSaving}
+      >
+        <Text style={styles.primaryButtonText}>
+          {isSaving ? 'Lagrer...' : 'Lagre kvittering'}
+        </Text>
       </Pressable>
     </ScrollView>
   );
@@ -238,14 +344,42 @@ function createFallbackDraft(): ParsedReceiptResult {
   };
 }
 
-function parseNumber(value: string): number {
-  const normalized = value.replace(',', '.');
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
+function mapItemToDraft(item: ReceiptItem): ItemDraft {
+  return {
+    id: item.id,
+    rawText: item.rawText ?? null,
+    normalizedName: item.normalizedName ?? '',
+    quantityText: formatNumber(item.quantity),
+    unitText: item.unit ?? '',
+    lineTotalText: formatNumber(item.lineTotal),
+    discount: item.discount ?? 0,
+    confidence: item.confidence ?? null,
+  };
 }
 
-function calculateTotal(items: ReceiptItem[]): number {
-  return items.reduce((sum, item) => sum + (item.lineTotal ?? 0), 0);
+function formatNumber(value?: number | null): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return Number.isFinite(value) ? String(value).replace('.', ',') : '';
+}
+
+function sanitizeNumericInput(value: string): string {
+  return value.replace(/[^0-9,.\-]/g, '').replace('.', ',');
+}
+
+function parseOptionalNumber(value: string): number | null {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = trimmed.replace(',', '.');
+  const parsed = Number(normalized);
+
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 const styles = StyleSheet.create({
@@ -297,6 +431,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 14,
     backgroundColor: '#ffffff',
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  rowField: {
+    flex: 1,
   },
   emptyState: {
     padding: 16,
@@ -360,5 +501,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#991b1b',
     fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

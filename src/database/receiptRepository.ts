@@ -207,6 +207,30 @@ export async function getReceiptById(id: string): Promise<Receipt | null> {
   );
 }
 
+export async function deleteReceiptById(id: string): Promise<void> {
+  await runMigrations();
+
+  const db = await getDb();
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `
+        DELETE FROM receipt_items
+        WHERE receipt_id = ?
+      `,
+      [id]
+    );
+
+    await db.runAsync(
+      `
+        DELETE FROM receipts
+        WHERE id = ?
+      `,
+      [id]
+    );
+  });
+}
+
 function mapReceiptRow(row: ReceiptRow, items: ReceiptItem[]): Receipt {
   return {
     id: row.id,

@@ -1,7 +1,8 @@
-import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,7 +11,10 @@ import {
 } from 'react-native';
 
 import type { Receipt } from '../src/models/receipt';
-import { listStoredReceipts } from '../src/services/receiptStorageService';
+import {
+  deleteStoredReceipt,
+  listStoredReceipts,
+} from '../src/services/receiptStorageService';
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -18,6 +22,7 @@ export default function HistoryScreen() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [deletingReceiptId, setDeletingReceiptId] = useState<string | null>(null);
 
   const loadReceipts = useCallback(async () => {
     try {
@@ -34,16 +39,50 @@ export default function HistoryScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    void loadReceipts();
-  }, [loadReceipts]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadReceipts();
+    }, [loadReceipts])
+  );
+
+  const confirmDeleteReceipt = (receipt: Receipt) => {
+    Alert.alert(
+      'Slett kvittering',
+      `Vil du slette kvitteringen fra ${receipt.merchantName}?`,
+      [
+        {
+          text: 'Avbryt',
+          style: 'cancel',
+        },
+        {
+          text: 'Slett',
+          style: 'destructive',
+          onPress: () => {
+            void handleDeleteReceipt(receipt.id);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleDeleteReceipt = async (receiptId: string) => {
+    try {
+      setDeletingReceiptId(receiptId);
+      await deleteStoredReceipt(receiptId);
+
+      setReceipts((current) => current.filter((receipt) => receipt.id !== receiptId));
+    } catch (error) {
+      console.error('Failed to delete receipt', error);
+      Alert.alert('Sletting feilet', 'Kunne ikke slette kvitteringen.');
+    } finally {
+      setDeletingReceiptId(null);
+    }
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Historikk</Text>
-      <Text style={styles.description}>
-        Lagrede kvitteringer vises her.
-      </Text>
+      <Text style={styles.description}>Lagrede kvitteringer vises her.</Text>
 
       <Pressable style={styles.refreshButton} onPress={loadReceipts}>
         <Text style={styles.refreshButtonText}>Oppdater</Text>
@@ -73,29 +112,55 @@ export default function HistoryScreen() {
 
       {!isLoading &&
         !errorMessage &&
-        receipts.map((receipt) => (
-          <Pressable
-            key={receipt.id}
-            style={styles.card}
-            onPress={() =>
-              router.push({
-                pathname: '/receipt/[id]',
-                params: { id: receipt.id },
-              })
-            }
-          >
-            <View style={styles.row}>
-              <Text style={styles.store}>{receipt.merchantName}</Text>
-              <Text style={styles.total}>
-                {receipt.total.toFixed(2)} {receipt.currency}
-              </Text>
-            </View>
+        receipts.map((receipt) => {
+          const isDeleting = deletingReceiptId === receipt.id;
 
-            <Text style={styles.meta}>{receipt.purchaseDate}</Text>
-          </Pressable>
-        ))}
+          return (
+            <View key={receipt.id} style={styles.card}>
+              <Pressable
+                style={styles.cardMain}
+                onPress={() =>
+                  router.push({
+                    pathname: '/receipt/[id]',
+                    params: { id: receipt.id },
+                  })
+                }
+              >
+                <View style={styles.row}>
+                  <Text style={styles.store}>{receipt.merchantName}</Text>
+                  <Text style={styles.total}>
+                    {receipt.total.toFixed(2)} {receipt.currency}
+                  </Text>
+                </View>
+
+                <Text style={styles.meta}>{formatDate(receipt.purchaseDate)}</Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.deleteButton, isDeleting && styles.disabledButton]}
+                onPress={() => confirmDeleteReceipt(receipt)}
+                disabled={isDeleting}
+              >
+                <Text style={styles.deleteButtonText}>
+                  {isDeleting ? 'Sletter...' : 'Slett'}
+                </Text>
+              </Pressable>
+            </View>
+          );
+        })}
     </ScrollView>
   );
+}
+
+function formatDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+
+  if (!match) {
+    return value;
+  }
+
+  const [, year, month, day] = match;
+  return `${day}.${month}.${year}`;
 }
 
 const styles = StyleSheet.create({
@@ -166,6 +231,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
     marginBottom: 12,
   },
+  cardMain: {
+    marginBottom: 12,
+  },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -186,5 +254,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#111827',
+  },
+  deleteButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: '#fee2e2',
+  },
+  deleteButtonText: {
+    color: '#991b1b',
+    fontWeight: '600',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

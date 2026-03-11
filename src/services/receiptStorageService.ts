@@ -1,7 +1,8 @@
 import {
-    getAllReceipts,
-    getReceiptById,
-    saveReceiptWithItems,
+  deleteReceiptById,
+  getAllReceipts,
+  getReceiptById,
+  saveReceiptWithItems,
 } from '../database/receiptRepository';
 import type { ParsedReceiptResult } from '../models/parser';
 import type { Receipt } from '../models/receipt';
@@ -18,4 +19,8 @@ export async function listStoredReceipts(): Promise<Receipt[]> {
 
 export async function getStoredReceipt(id: string): Promise<Receipt | null> {
   return getReceiptById(id);
+}
+
+export async function deleteStoredReceipt(id: string): Promise<void> {
+  await deleteReceiptById(id);
 }

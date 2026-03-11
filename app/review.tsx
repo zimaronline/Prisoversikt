@@ -36,6 +36,9 @@ export default function ReviewScreen() {
   const initialDraft = useMemo(() => parseDraft(rawDraft), [rawDraft]);
 
   const [merchantName, setMerchantName] = useState(initialDraft.merchantName);
+  const [merchantAddress, setMerchantAddress] = useState(
+    initialDraft.merchantAddress ?? ''
+  );
   const [purchaseDate, setPurchaseDate] = useState(initialDraft.purchaseDate);
   const [totalText, setTotalText] = useState(formatNumber(initialDraft.total));
   const [items, setItems] = useState<ItemDraft[]>(
@@ -157,6 +160,7 @@ export default function ReviewScreen() {
 
       const payload: ParsedReceiptResult = {
         merchantName: trimmedMerchantName,
+        merchantAddress: merchantAddress.trim() || null,
         purchaseDate: trimmedPurchaseDate,
         subtotal: null,
         total: parsedTotal,
@@ -198,6 +202,14 @@ export default function ReviewScreen() {
           style={styles.input}
           placeholder="Butikknavn"
         />
+
+      <Text style={styles.label}>Adresse</Text>
+      <TextInput
+        value={merchantAddress}
+        onChangeText={setMerchantAddress}
+        style={styles.input}
+        placeholder="Valgfritt"
+      />
 
         <Text style={styles.label}>Dato</Text>
         <TextInput
@@ -349,6 +361,7 @@ function parseDraft(value?: string): ParsedReceiptResult {
 function createFallbackDraft(): ParsedReceiptResult {
   return {
     merchantName: '',
+    merchantAddress: null,
     purchaseDate: '',
     subtotal: null,
     total: 0,

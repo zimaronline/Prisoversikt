@@ -17,6 +17,7 @@ export async function runMigrations(): Promise<void> {
     CREATE TABLE IF NOT EXISTS receipts (
       id TEXT PRIMARY KEY NOT NULL,
       merchant_name TEXT NOT NULL,
+      merchant_address TEXT,
       purchase_date TEXT NOT NULL,
       subtotal REAL,
       total REAL NOT NULL,
@@ -50,9 +51,24 @@ export async function runMigrations(): Promise<void> {
       ON receipt_items (receipt_id);
   `);
 
+  await ensureReceiptsColumns();
   await ensureReceiptItemsColumns();
 
   hasRunMigrations = true;
+}
+
+async function ensureReceiptsColumns(): Promise<void> {
+  const db = await getDb();
+
+  const columns = await db.getAllAsync<TableInfoRow>(
+    `PRAGMA table_info(receipts);`
+  );
+
+  const columnNames = new Set(columns.map((column) => column.name));
+
+  if (!columnNames.has('merchant_address')) {
+    await db.execAsync(`ALTER TABLE receipts ADD COLUMN merchant_address TEXT;`);
+  }
 }
 
 async function ensureReceiptItemsColumns(): Promise<void> {

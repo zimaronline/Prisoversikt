@@ -7,6 +7,7 @@ import { runMigrations } from './migrations';
 type ReceiptRow = {
   id: string;
   merchant_name: string;
+  merchant_address: string | null;
   purchase_date: string;
   subtotal: number | null;
   total: number;
@@ -44,6 +45,7 @@ export async function saveReceiptWithItems(
   const receiptId = createId('receipt');
 
   const merchantName = parsedReceipt.merchantName.trim();
+  const merchantAddress = parsedReceipt.merchantAddress?.trim() || null;
   const purchaseDate = parsedReceipt.purchaseDate.trim();
 
   await db.withTransactionAsync(async () => {
@@ -52,6 +54,7 @@ export async function saveReceiptWithItems(
         INSERT INTO receipts (
           id,
           merchant_name,
+          merchant_address,
           purchase_date,
           subtotal,
           total,
@@ -63,11 +66,12 @@ export async function saveReceiptWithItems(
           created_at,
           updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         receiptId,
         merchantName,
+        merchantAddress,
         purchaseDate,
         parsedReceipt.subtotal ?? null,
         parsedReceipt.total,
@@ -131,6 +135,7 @@ export async function getAllReceipts(): Promise<Receipt[]> {
       SELECT
         id,
         merchant_name,
+        merchant_address,
         purchase_date,
         subtotal,
         total,
@@ -159,6 +164,7 @@ export async function getReceiptById(id: string): Promise<Receipt | null> {
       SELECT
         id,
         merchant_name,
+        merchant_address,
         purchase_date,
         subtotal,
         total,
@@ -235,6 +241,7 @@ function mapReceiptRow(row: ReceiptRow, items: ReceiptItem[]): Receipt {
   return {
     id: row.id,
     merchantName: row.merchant_name,
+    merchantAddress: row.merchant_address,
     purchaseDate: row.purchase_date,
     subtotal: row.subtotal,
     total: row.total,

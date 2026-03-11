@@ -70,6 +70,10 @@ export default function ReceiptDetailScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{receipt.merchantName}</Text>
+      {receipt.merchantAddress ? (
+        <Text style={styles.meta}>Adresse: {receipt.merchantAddress}</Text>
+      ) : null}
+
       <Text style={styles.meta}>Dato: {receipt.purchaseDate}</Text>
       <Text style={styles.meta}>
         Total: {receipt.total.toFixed(2)} {receipt.currency}

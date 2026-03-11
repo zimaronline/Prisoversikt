@@ -134,6 +134,10 @@ export default function HistoryScreen() {
                 </View>
 
                 <Text style={styles.meta}>{formatDate(receipt.purchaseDate)}</Text>
+
+                {receipt.merchantAddress ? (
+                  <Text style={styles.meta}>{receipt.merchantAddress}</Text>
+                ) : null}
               </Pressable>
 
               <Pressable

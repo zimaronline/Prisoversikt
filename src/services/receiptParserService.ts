@@ -1,3 +1,4 @@
+import type { OcrApiReceiptResponse } from '../models/ocrApi';
 import type { ParsedReceiptResult } from '../models/parser';
 import type { ReceiptItem } from '../models/receiptItem';
 
@@ -115,43 +116,39 @@ async function parseReceiptViaBackend(
     );
   }
 
-  const payload = (await response.json()) as unknown;
+  const payload = (await response.json()) as OcrApiReceiptResponse;
   return mapBackendResponse(payload, imageUri);
 }
 
 function mapBackendResponse(
-  payload: unknown,
+  payload: OcrApiReceiptResponse,
   imageUri: string
 ): ParsedReceiptResult {
-  const source = asRecord(payload);
-
-  const itemsSource = Array.isArray(source.items)
-    ? source.items
-    : Array.isArray(source.receipt_items)
-      ? source.receipt_items
-      : [];
-
-  const items = itemsSource.map((item) => mapBackendItem(item));
-
   return {
-    merchantName: readString(source.merchantName, source.merchant_name, '') || '',
-    merchantAddress:
-      readString(source.merchantAddress, source.merchant_address, null) ?? null,
-    purchaseDate:
-      normalizeDate(readString(source.purchaseDate, source.purchase_date, '')) || '',
-    subtotal: readNumber(source.subtotal, source.sub_total, null),
-    total: readNumber(source.total, source.amount_total, 0) ?? 0,
-    vatTotal: readNumber(source.vatTotal, source.vat_total, null),
-    currency: readString(source.currency, source.currency_code, 'NOK') || 'NOK',
+    merchantName: payload.merchantName?.trim() || '',
+    merchantAddress: payload.merchantAddress?.trim() || null,
+    purchaseDate: normalizeDate(payload.purchaseDate ?? ''),
+    subtotal: payload.subtotal ?? null,
+    total: payload.total ?? 0,
+    vatTotal: payload.vatTotal ?? null,
+    currency: payload.currency?.trim() || 'NOK',
     imageUri,
     rawOcrResponse: JSON.stringify(payload),
-    parseConfidence: readNumber(
-      source.parseConfidence,
-      source.parse_confidence,
-      source.confidence,
-      null
+    parseConfidence: payload.parseConfidence ?? null,
+    items: payload.items.map((item) =>
+      createReceiptItem({
+        rawText: item.rawText ?? null,
+        normalizedName: item.normalizedName?.trim() || '',
+        quantity: item.quantity ?? null,
+        unit: item.unit ?? null,
+        sizeValue: item.sizeValue ?? null,
+        sizeUnit: item.sizeUnit ?? null,
+        unitPrice: item.unitPrice ?? null,
+        lineTotal: item.lineTotal ?? 0,
+        discount: item.discount ?? null,
+        confidence: item.confidence ?? null,
+      })
     ),
-    items,
   };
 }
 

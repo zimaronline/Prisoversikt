@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   Pressable,
@@ -11,139 +12,176 @@ import {
   View,
 } from 'react-native';
 
-import { parseReceiptMock } from '../src/services/receiptParserService';
+import { parseReceiptFromImage } from '../src/services/receiptParserService';
+
+const MOCK_ENABLED = process.env.EXPO_PUBLIC_ENABLE_MOCK_PARSER !== 'false';
 
 export default function ScanScreen() {
   const router = useRouter();
-  const [previewUri, setPreviewUri] = useState<string | null>(null);
-  const [draftJson, setDraftJson] = useState<string | null>(null);
-  const [isPreparingDraft, setIsPreparingDraft] = useState(false);
 
-  const handleImageResult = async (result: ImagePicker.ImagePickerResult) => {
-    if (result.canceled) {
-      return;
-    }
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-    const asset = result.assets?.[0];
-    if (!asset?.uri) {
-      Alert.alert('Feil', 'Fant ikke bilde-URI.');
-      return;
-    }
-
+  const pickFromLibrary = async () => {
     try {
-      setIsPreparingDraft(true);
+      setErrorMessage(null);
 
-      const draft = await parseReceiptMock(asset.uri);
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Tilgang mangler',
+          'Du må gi tilgang til bilder for å velge kvittering fra galleri.'
+        );
+        return;
+      }
 
-      setPreviewUri(asset.uri);
-      setDraftJson(JSON.stringify(draft));
-    } catch {
-      Alert.alert('Feil', 'Kunne ikke forberede kvitteringen.');
-    } finally {
-      setIsPreparingDraft(false);
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
+
+      setImageUri(result.assets[0].uri);
+    } catch (error) {
+      console.error('Failed to pick image', error);
+      setErrorMessage('Kunne ikke åpne bildegalleriet.');
     }
   };
 
   const takePhoto = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    try {
+      setErrorMessage(null);
 
-    if (!permission.granted) {
-      Alert.alert('Tilgang nektet', 'Appen trenger kameratilgang.');
-      return;
+      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          'Tilgang mangler',
+          'Du må gi kameratilgang for å ta bilde av kvitteringen.'
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 1,
+      });
+
+      if (result.canceled || !result.assets?.length) {
+        return;
+      }
+
+      setImageUri(result.assets[0].uri);
+    } catch (error) {
+      console.error('Failed to take photo', error);
+      setErrorMessage('Kunne ikke åpne kameraet.');
     }
-
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.8,
-    });
-
-    await handleImageResult(result);
   };
 
-  const pickFromLibrary = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (!permission.granted) {
-      Alert.alert('Tilgang nektet', 'Appen trenger tilgang til bildegalleriet.');
+  const useSelectedImage = async () => {
+    if (!imageUri) {
+      Alert.alert('Manglende bilde', 'Velg eller ta et bilde først.');
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.8,
-    });
+    try {
+      setIsParsing(true);
+      setErrorMessage(null);
 
-    await handleImageResult(result);
+      const parsed = await parseReceiptFromImage(imageUri);
+
+      router.push({
+        pathname: '/review',
+        params: {
+          draft: JSON.stringify(parsed),
+        },
+      });
+    } catch (error) {
+      console.error('Failed to parse receipt', error);
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Kunne ikke tolke kvitteringsbildet.';
+
+      setErrorMessage(message);
+      Alert.alert('Tolking feilet', message);
+    } finally {
+      setIsParsing(false);
+    }
   };
 
   const resetImage = () => {
-    setPreviewUri(null);
-    setDraftJson(null);
-  };
-
-  const continueToReview = () => {
-    if (!draftJson) {
-      Alert.alert('Mangler bilde', 'Velg eller ta et bilde først.');
-      return;
-    }
-
-    router.push({
-      pathname: '/review',
-      params: {
-        draft: draftJson,
-      },
-    });
+    setImageUri(null);
+    setErrorMessage(null);
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Skann kvittering</Text>
       <Text style={styles.description}>
-        Velg bilde fra kamera eller galleri.
+        Ta bilde eller velg bilde fra galleri. Når bildet er klart, tolkes det og
+        åpnes i kontrollskjermen.
       </Text>
 
-      <Text style={styles.notice}>
-        Denne versjonen tolker ikke varelinjer automatisk ennå. Du går videre til
-        manuell kontroll på neste skjerm.
-      </Text>
-
-      <Pressable
-        style={[styles.primaryButton, isPreparingDraft && styles.disabledButton]}
-        onPress={takePhoto}
-        disabled={isPreparingDraft}
-      >
-        <Text style={styles.primaryButtonText}>
-          {isPreparingDraft ? 'Klargjør...' : 'Åpne kamera'}
+      <View style={styles.statusCard}>
+        <Text style={styles.statusTitle}>Parsermodus</Text>
+        <Text style={styles.statusText}>
+          {MOCK_ENABLED ? 'Mock-parser er aktiv' : 'Ekte OCR-endepunkt er aktivt'}
         </Text>
+      </View>
+
+      <Pressable style={styles.primaryButton} onPress={takePhoto}>
+        <Text style={styles.primaryButtonText}>Åpne kamera</Text>
       </Pressable>
 
-      <Pressable
-        style={[styles.secondaryButton, isPreparingDraft && styles.disabledButton]}
-        onPress={pickFromLibrary}
-        disabled={isPreparingDraft}
-      >
+      <Pressable style={styles.secondaryButton} onPress={pickFromLibrary}>
         <Text style={styles.secondaryButtonText}>Velg fra galleri</Text>
       </Pressable>
 
-      {previewUri ? (
-        <View style={styles.previewCard}>
-          <Text style={styles.previewTitle}>Forhåndsvisning</Text>
+      {imageUri ? (
+        <View style={styles.previewSection}>
+          <Text style={styles.sectionTitle}>Forhåndsvisning</Text>
+          <Image source={{ uri: imageUri }} style={styles.previewImage} />
 
-          <Image source={{ uri: previewUri }} style={styles.previewImage} />
-
-          <Text style={styles.previewNote}>
-            Bildet er valgt. Neste steg er manuell kontroll og utfylling.
-          </Text>
-
-          <Pressable style={styles.primaryButton} onPress={continueToReview}>
-            <Text style={styles.primaryButtonText}>Fortsett til kontroll</Text>
+          <Pressable
+            style={[styles.primaryButton, isParsing && styles.disabledButton]}
+            onPress={useSelectedImage}
+            disabled={isParsing}
+          >
+            <Text style={styles.primaryButtonText}>
+              {isParsing ? 'Tolker kvittering...' : 'Bruk dette bildet'}
+            </Text>
           </Pressable>
 
           <Pressable style={styles.secondaryButton} onPress={resetImage}>
             <Text style={styles.secondaryButtonText}>Velg nytt bilde</Text>
           </Pressable>
+        </View>
+      ) : (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateTitle}>Ingen kvittering valgt</Text>
+          <Text style={styles.emptyStateText}>
+            Når du har valgt et bilde, vises det her før tolkingen starter.
+          </Text>
+        </View>
+      )}
+
+      {isParsing ? (
+        <View style={styles.centerBlock}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.helperText}>Tolker kvittering...</Text>
+        </View>
+      ) : null}
+
+      {errorMessage ? (
+        <View style={styles.errorCard}>
+          <Text style={styles.errorText}>{errorMessage}</Text>
         </View>
       ) : null}
     </ScrollView>
@@ -152,6 +190,7 @@ export default function ScanScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    flexGrow: 1,
     padding: 24,
     backgroundColor: '#ffffff',
   },
@@ -165,18 +204,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: '#4b5563',
-    marginBottom: 12,
+    marginBottom: 20,
   },
-  notice: {
+  statusCard: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#dbeafe',
+    borderRadius: 16,
+    backgroundColor: '#eff6ff',
+    marginBottom: 16,
+  },
+  statusTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1e3a8a',
+    marginBottom: 6,
+  },
+  statusText: {
     fontSize: 14,
     lineHeight: 22,
-    color: '#92400e',
-    backgroundColor: '#fffbeb',
-    borderWidth: 1,
-    borderColor: '#fde68a',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 24,
+    color: '#1d4ed8',
   },
   primaryButton: {
     backgroundColor: '#111827',
@@ -194,11 +241,11 @@ const styles = StyleSheet.create({
   secondaryButton: {
     borderWidth: 1,
     borderColor: '#d1d5db',
+    backgroundColor: '#ffffff',
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderRadius: 12,
     marginBottom: 12,
-    backgroundColor: '#ffffff',
   },
   secondaryButtonText: {
     color: '#111827',
@@ -206,20 +253,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
-  disabledButton: {
-    opacity: 0.6,
+  previewSection: {
+    marginTop: 8,
   },
-  previewCard: {
-    marginTop: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    borderRadius: 16,
-    backgroundColor: '#f9fafb',
-  },
-  previewTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
     marginBottom: 12,
     color: '#111827',
   },
@@ -231,10 +270,49 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5e7eb',
     marginBottom: 16,
   },
-  previewNote: {
+  emptyState: {
+    marginTop: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 16,
+    backgroundColor: '#f9fafb',
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 6,
+  },
+  emptyStateText: {
     fontSize: 14,
     lineHeight: 22,
-    color: '#4b5563',
-    marginBottom: 16,
+    color: '#6b7280',
+  },
+  centerBlock: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  helperText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#6b7280',
+    marginTop: 8,
+  },
+  errorCard: {
+    marginTop: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    borderRadius: 16,
+    backgroundColor: '#fef2f2',
+  },
+  errorText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#991b1b',
+  },
+  disabledButton: {
+    opacity: 0.6,
   },
 });

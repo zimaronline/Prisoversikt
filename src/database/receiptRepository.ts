@@ -125,6 +125,103 @@ export async function saveReceiptWithItems(
   return receiptId;
 }
 
+export async function updateReceiptWithItems(
+  receiptId: string,
+  parsedReceipt: ParsedReceiptResult
+): Promise<void> {
+  await runMigrations();
+
+  const db = await getDb();
+  const now = new Date().toISOString();
+
+  const merchantName = parsedReceipt.merchantName.trim();
+  const merchantAddress = parsedReceipt.merchantAddress?.trim() || null;
+  const purchaseDate = parsedReceipt.purchaseDate.trim();
+
+  await db.withTransactionAsync(async () => {
+    const updateResult = await db.runAsync(
+      `
+        UPDATE receipts
+        SET
+          merchant_name = ?,
+          merchant_address = ?,
+          purchase_date = ?,
+          subtotal = ?,
+          total = ?,
+          vat_total = ?,
+          currency = ?,
+          image_uri = ?,
+          raw_ocr_response = ?,
+          parse_confidence = ?,
+          updated_at = ?
+        WHERE id = ?
+      `,
+      [
+        merchantName,
+        merchantAddress,
+        purchaseDate,
+        parsedReceipt.subtotal ?? null,
+        parsedReceipt.total,
+        parsedReceipt.vatTotal ?? null,
+        parsedReceipt.currency || 'NOK',
+        parsedReceipt.imageUri,
+        parsedReceipt.rawOcrResponse ?? null,
+        parsedReceipt.parseConfidence ?? null,
+        now,
+        receiptId,
+      ]
+    );
+
+    if (updateResult.changes === 0) {
+      throw new Error(`Receipt not found: ${receiptId}`);
+    }
+
+    await db.runAsync(
+      `
+        DELETE FROM receipt_items
+        WHERE receipt_id = ?
+      `,
+      [receiptId]
+    );
+
+    for (const item of parsedReceipt.items) {
+      await db.runAsync(
+        `
+          INSERT INTO receipt_items (
+            id,
+            receipt_id,
+            raw_text,
+            normalized_name,
+            quantity,
+            unit,
+            size_value,
+            size_unit,
+            unit_price,
+            line_total,
+            discount,
+            confidence
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          createId('item'),
+          receiptId,
+          item.rawText ?? null,
+          item.normalizedName.trim(),
+          item.quantity ?? null,
+          item.unit ?? null,
+          item.sizeValue ?? null,
+          item.sizeUnit ?? null,
+          item.unitPrice ?? null,
+          item.lineTotal,
+          item.discount ?? null,
+          item.confidence ?? null,
+        ]
+      );
+    }
+  });
+}
+
 export async function getAllReceipts(): Promise<Receipt[]> {
   await runMigrations();
 

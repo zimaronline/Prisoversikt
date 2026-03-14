@@ -59,6 +59,10 @@ export default function RootLayout() {
             name="review"
             options={{ title: 'Kontroller kvittering' }}
           />
+          <Stack.Screen
+            name="receipt/edit/[id]"
+            options={{ title: 'Rediger kvittering' }}
+          />
           <Stack.Screen name="history" options={{ title: 'Historikk' }} />
           <Stack.Screen
             name="receipt/[id]"

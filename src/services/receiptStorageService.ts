@@ -2,7 +2,7 @@ import {
   deleteReceiptById,
   getAllReceipts,
   getReceiptById,
-  saveReceiptWithItems,
+  saveReceiptWithItems
 } from '../database/receiptRepository';
 import type { ParsedReceiptResult } from '../models/parser';
 import type { Receipt } from '../models/receipt';

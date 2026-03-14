@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,7 +15,7 @@ import { getStoredReceipt } from '../../src/services/receiptStorageService';
 export default function ReceiptDetailScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
-
+  const router = useRouter();
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -78,7 +78,17 @@ export default function ReceiptDetailScreen() {
       <Text style={styles.meta}>
         Total: {receipt.total.toFixed(2)} {receipt.currency}
       </Text>
-
+      <Pressable
+        style={styles.editButton}
+        onPress={() =>
+          router.push({
+            pathname: '/receipt/edit/[id]',
+            params: { id: receipt.id },
+          })
+        }
+      >
+        <Text style={styles.editButtonText}>Rediger kvittering</Text>
+      </Pressable>
       {receipt.imageUri ? (
         <ZoomableReceiptImage uri={receipt.imageUri} />
       ) : null}
@@ -157,15 +167,6 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     marginBottom: 6,
   },
-  previewImage: {
-    width: '100%',
-    height: 260,
-    borderRadius: 12,
-    resizeMode: 'contain',
-    backgroundColor: '#e5e7eb',
-    marginTop: 18,
-    marginBottom: 24,
-  },
   section: {
     marginTop: 8,
   },
@@ -201,6 +202,18 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginBottom: 8,
   },
+  editButton: {
+  alignSelf: 'flex-start',
+  marginTop: 12,
+  paddingVertical: 10,
+  paddingHorizontal: 14,
+  borderRadius: 10,
+  backgroundColor: '#111827',
+},
+editButtonText: {
+  color: '#ffffff',
+  fontWeight: '600',
+},
   helperText: {
     fontSize: 15,
     lineHeight: 22,

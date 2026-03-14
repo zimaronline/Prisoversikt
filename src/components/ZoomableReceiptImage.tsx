@@ -7,7 +7,11 @@ import {
     Text,
     View,
 } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import {
+    Gesture,
+    GestureDetector,
+    GestureHandlerRootView,
+} from 'react-native-gesture-handler';
 import Animated, {
     useAnimatedStyle,
     useSharedValue,
@@ -17,8 +21,6 @@ import Animated, {
 type ZoomableReceiptImageProps = {
   uri: string;
 };
-
-const AnimatedImage = Animated.createAnimatedComponent(Image);
 
 export default function ZoomableReceiptImage({
   uri,
@@ -36,7 +38,7 @@ export default function ZoomableReceiptImage({
   const pinchGesture = Gesture.Pinch()
     .onUpdate((event) => {
       const nextScale = savedScale.value * event.scale;
-      scale.value = Math.max(1, Math.min(nextScale, 4));
+      scale.value = Math.max(1, Math.min(nextScale, 5));
     })
     .onEnd(() => {
       savedScale.value = scale.value;
@@ -73,40 +75,24 @@ export default function ZoomableReceiptImage({
       savedTranslateY.value = translateY.value;
     });
 
-  const doubleTapGesture = Gesture.Tap()
-    .numberOfTaps(2)
-    .onEnd(() => {
-      const shouldZoomIn = scale.value <= 1;
+  const gesture = Gesture.Simultaneous(pinchGesture, panGesture);
 
-      if (shouldZoomIn) {
-        scale.value = withTiming(2);
-        savedScale.value = 2;
-      } else {
-        scale.value = withTiming(1);
-        savedScale.value = 1;
-        translateX.value = withTiming(0);
-        translateY.value = withTiming(0);
-        savedTranslateX.value = 0;
-        savedTranslateY.value = 0;
-      }
-    });
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+        { scale: scale.value },
+      ],
+    };
+  });
 
-  const composedGesture = Gesture.Simultaneous(
-    doubleTapGesture,
-    Gesture.Simultaneous(pinchGesture, panGesture)
-  );
+  const openViewer = () => {
+    setIsOpen(true);
+  };
 
-  const animatedImageStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: scale.value },
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-    ],
-  }));
-
-  const resetAndClose = () => {
+  const closeViewer = () => {
     setIsOpen(false);
-
     scale.value = 1;
     savedScale.value = 1;
     translateX.value = 0;
@@ -118,10 +104,9 @@ export default function ZoomableReceiptImage({
   return (
     <>
       <Pressable
-        onPress={() => setIsOpen(true)}
-        accessibilityRole="imagebutton"
+        onPress={openViewer}
+        accessibilityRole="button"
         accessibilityLabel="Åpne kvitteringsbilde i fullskjerm"
-        accessibilityHint="Trykk for å åpne bilde og zoome inn"
       >
         <Image source={{ uri }} style={styles.previewImage} />
       </Pressable>
@@ -130,12 +115,12 @@ export default function ZoomableReceiptImage({
         visible={isOpen}
         animationType="fade"
         presentationStyle="fullScreen"
-        onRequestClose={resetAndClose}
+        onRequestClose={closeViewer}
       >
-        <View style={styles.modalContainer}>
+        <GestureHandlerRootView style={styles.modalContainer}>
           <View style={styles.topBar}>
             <Pressable
-              onPress={resetAndClose}
+              onPress={closeViewer}
               style={styles.closeButton}
               accessibilityRole="button"
               accessibilityLabel="Lukk kvitteringsbilde"
@@ -146,16 +131,16 @@ export default function ZoomableReceiptImage({
             <Text style={styles.helperText}>Knip for å zoome · Dra for å flytte</Text>
           </View>
 
-          <GestureDetector gesture={composedGesture}>
-            <View style={styles.viewer}>
-              <AnimatedImage
+          <GestureDetector gesture={gesture}>
+            <Animated.View style={[styles.viewer, animatedStyle]}>
+              <Image
                 source={{ uri }}
-                style={[styles.fullscreenImage, animatedImageStyle]}
+                style={styles.fullscreenImage}
                 resizeMode="contain"
               />
-            </View>
+            </Animated.View>
           </GestureDetector>
-        </View>
+        </GestureHandlerRootView>
       </Modal>
     </>
   );
@@ -205,7 +190,6 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
   },
   fullscreenImage: {
     width: '100%',

@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { runMigrations } from '../src/database/migrations';
 
 export default function RootLayout() {
@@ -34,36 +35,38 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (errorMessage) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.errorTitle}>Oppstart feilet</Text>
-        <Text style={styles.errorText}>{errorMessage}</Text>
-      </View>
-    );
-  }
-
-  if (!isReady) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>Starter appen...</Text>
-      </View>
-    );
-  }
-
   return (
-    <Stack
-      screenOptions={{
-        headerTitleAlign: 'center',
-      }}
-    >
-      <Stack.Screen name="index" options={{ title: 'Receipt Scanner' }} />
-      <Stack.Screen name="scan" options={{ title: 'Skann kvittering' }} />
-      <Stack.Screen name="review" options={{ title: 'Kontroller kvittering' }} />
-      <Stack.Screen name="history" options={{ title: 'Historikk' }} />
-      <Stack.Screen name="receipt/[id]" options={{ title: 'Kvitteringsdetaljer' }} />
-    </Stack>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      {errorMessage ? (
+        <View style={styles.centered}>
+          <Text style={styles.errorTitle}>Oppstart feilet</Text>
+          <Text style={styles.errorText}>{errorMessage}</Text>
+        </View>
+      ) : !isReady ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.loadingText}>Starter appen...</Text>
+        </View>
+      ) : (
+        <Stack
+          screenOptions={{
+            headerTitleAlign: 'center',
+          }}
+        >
+          <Stack.Screen name="index" options={{ title: 'Receipt Scanner' }} />
+          <Stack.Screen name="scan" options={{ title: 'Skann kvittering' }} />
+          <Stack.Screen
+            name="review"
+            options={{ title: 'Kontroller kvittering' }}
+          />
+          <Stack.Screen name="history" options={{ title: 'Historikk' }} />
+          <Stack.Screen
+            name="receipt/[id]"
+            options={{ title: 'Kvitteringsdetaljer' }}
+          />
+        </Stack>
+      )}
+    </GestureHandlerRootView>
   );
 }
 

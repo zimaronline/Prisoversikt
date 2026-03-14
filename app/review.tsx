@@ -173,7 +173,6 @@ export default function ReviewScreen() {
       };
 
       await saveParsedReceipt(payload);
-
       router.replace('/history');
     } catch (error) {
       console.error('Failed to save receipt', error);

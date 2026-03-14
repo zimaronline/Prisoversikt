@@ -2,13 +2,13 @@ import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
+import ZoomableReceiptImage from '../../src/components/ZoomableReceiptImage';
 import type { Receipt } from '../../src/models/receipt';
 import { getStoredReceipt } from '../../src/services/receiptStorageService';
 
@@ -80,7 +80,7 @@ export default function ReceiptDetailScreen() {
       </Text>
 
       {receipt.imageUri ? (
-        <Image source={{ uri: receipt.imageUri }} style={styles.previewImage} />
+        <ZoomableReceiptImage uri={receipt.imageUri} />
       ) : null}
 
       <View style={styles.section}>
